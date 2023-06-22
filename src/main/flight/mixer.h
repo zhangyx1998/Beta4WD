@@ -129,6 +129,8 @@ void mixTable(timeUs_t currentTimeUs);
 void stopMotors(void);
 void writeMotors(void);
 
+void motorMix4WD(void);
+
 bool mixerIsTricopter(void);
 
 void mixerSetThrottleAngleCorrection(int correctionValue);

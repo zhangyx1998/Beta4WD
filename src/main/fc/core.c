@@ -1286,9 +1286,11 @@ FAST_CODE void taskMainPidLoop(timeUs_t currentTimeUs)
     DEBUG_SET(DEBUG_PIDLOOP, 0, micros() - currentTimeUs);
 
     subTaskRcCommand(currentTimeUs);
-    subTaskPidController(currentTimeUs);
-    subTaskMotorUpdate(currentTimeUs);
-    subTaskPidSubprocesses(currentTimeUs);
+    motorMix4WD();
+    writeMotors();
+    // subTaskPidController(currentTimeUs);
+    // subTaskMotorUpdate(currentTimeUs);
+    // subTaskPidSubprocesses(currentTimeUs);
 
     DEBUG_SET(DEBUG_CYCLETIME, 0, getTaskDeltaTimeUs(TASK_SELF));
     DEBUG_SET(DEBUG_CYCLETIME, 1, getAverageSystemLoadPercent());

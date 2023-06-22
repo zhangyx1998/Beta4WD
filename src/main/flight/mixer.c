@@ -97,6 +97,51 @@ static void writeAllMotors(int16_t mc)
     writeMotors();
 }
 
+static const float wheelMtx[12] = {
+    1,  1,  1,
+    1, -1,  1,
+    1, -1, -1,
+    1,  1, -1
+};
+
+static float normalizeValue(float input)
+{
+    if (input > 0.0f) {
+        return input > 1000.0f ? 1000.0f : input;
+    } else if (input < -0.0f) {
+        float value = -1001.0f - input;
+        return value < -1000.0f ? -1000.0f : value;
+    }
+    return 0.0f;
+}
+
+void motorMix4WD(void)
+{
+    float scale = 500;
+    const float *mtx = wheelMtx;
+    // Check for motor availablity
+    if (mixerRuntime.motorCount < 4) {
+        return;
+    }
+    // Calculate motor output
+    for (int i = 0; i < 4; i++) {
+        motor[i] =
+            rcCommand[PITCH] * mtx[0] + // Forward/backward
+            rcCommand[ROLL ] * mtx[1] + // Left/right
+            rcCommand[YAW  ] * mtx[2];  // Rotate
+        mtx += 3;
+        float absMotor = fabsf(motor[i]);
+        if (absMotor > scale) {
+            scale = absMotor;
+        }
+    }
+    // Scale all values within -1000~1000, preserving ratios.
+    scale /= 1000.0f;
+    for (int i = 0; i < 4; i++) {
+        motor[i] = normalizeValue(motor[i] / scale);
+    }
+}
+
 void stopMotors(void)
 {
     writeAllMotors(mixerRuntime.disarmMotorOutput);

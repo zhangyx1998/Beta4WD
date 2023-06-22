@@ -18,7 +18,7 @@
 # The target to build, see BASE_TARGETS below
 DEFAULT_TARGET    ?= STM32F405
 TARGET    ?=
-CONFIG    ?=
+CONFIG    ?= TMVELOXF411
 
 # Compile-time options
 OPTIONS   ?=
@@ -254,6 +254,7 @@ CFLAGS     += $(ARCH_FLAGS) \
               $(DEBUG_FLAGS) \
               -std=gnu17 \
               -Wall -Wextra -Werror -Wpedantic -Wunsafe-loop-optimizations -Wdouble-promotion \
+			  -Wno-unused-function \
               $(EXTRA_WARNING_FLAGS) \
               -ffunction-sections \
               -fdata-sections \
