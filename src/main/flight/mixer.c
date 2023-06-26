@@ -106,18 +106,28 @@ static const float wheelMtx[12] = {
 
 static float normalizeValue(float input)
 {
-    if (input > 0.0f) {
-        return input > 1000.0f ? 1000.0f : input;
-    } else if (input < -0.0f) {
-        float value = -1001.0f - input;
-        return value < -1000.0f ? -1000.0f : value;
+    if (input > 10.0f) {
+        input = (input > 1000.0f ? 1000.0f : input);
+    } else if (input < -10.0f) {
+        input = -1001.0f - input;
+        input = input < -1000.0f ? -1000.0f : input;
+    } else {
+        input = 0.0f;
     }
-    return 0.0f;
+    return DSHOT_3D_FORWARD_MIN_THROTTLE + input;
 }
 
 void motorMix4WD(void)
 {
-    float scale = 500;
+    // Set all motors to idle if not armed
+    if (!ARMING_FLAG(ARMED)) {
+        for (int i = 0; i < mixerRuntime.motorCount; i++) {
+            motor[i] = mixerRuntime.disarmMotorOutput;
+        }
+        return;
+    }
+    // Proceed with mixing
+    float scale = 1000.0f;
     const float *mtx = wheelMtx;
     // Check for motor availablity
     if (mixerRuntime.motorCount < 4) {
