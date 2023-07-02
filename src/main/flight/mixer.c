@@ -74,6 +74,7 @@
 static FAST_DATA_ZERO_INIT float motorMixRange;
 
 float FAST_DATA_ZERO_INIT motor[MAX_SUPPORTED_MOTORS];
+float motor_msp[MAX_SUPPORTED_MOTORS] = {DSHOT_3D_FORWARD_MIN_THROTTLE};
 float motor_disarmed[MAX_SUPPORTED_MOTORS];
 
 static FAST_DATA_ZERO_INIT int throttleAngleCorrection;
@@ -97,6 +98,64 @@ static void writeAllMotors(int16_t mc)
     writeMotors();
 }
 
+typedef struct simplePID_s {
+    pidCoefficient_t *param;
+    float integral;
+    float previous_error;
+} simplePID_t;
+
+static simplePID_t PID[3] = {
+    {
+        .param = &pidRuntime.pidCoefficient[0],
+        .integral = 0,
+        .previous_error = 0
+    },
+    {
+        .param = &pidRuntime.pidCoefficient[1],
+        .integral = 0,
+        .previous_error = 0
+    },
+    {
+        .param = &pidRuntime.pidCoefficient[2],
+        .integral = 0,
+        .previous_error = 0
+    }
+};
+
+void resetPID(void)
+{
+    for (int i = 0; i < 3; i++) {
+        PID[i].integral = 0;
+        PID[i].previous_error = 0;
+    }
+}
+
+float simplePID(simplePID_t *pid, float error) {
+    pid->integral += error;
+    float derivative = error - pid->previous_error;
+    pid->previous_error = error;
+    return
+        pid->param->Kp * error +
+        pid->param->Ki * pid->integral +
+        pid->param->Kd * derivative;
+}
+
+static float normalizeValue(const float input)
+{
+    float value = fabsf(input);
+    value = value > 999.0f ? 999.0f : value;
+    // Low throttle approx
+    if (value < 10.0f) {
+        value = value < 5.0f ? 0.0f : 10.0f;
+    }
+    // Bring back rotation direction
+    if (input >= 0.0f) {
+        return DSHOT_3D_FORWARD_MIN_THROTTLE + value;
+    } else {
+        return DSHOT_MIN_THROTTLE + value;
+    }
+}
+
 static const float wheelMtx[12] = {
     1,  1,  1,
     1, -1,  1,
@@ -104,41 +163,50 @@ static const float wheelMtx[12] = {
     1,  1, -1
 };
 
-static float normalizeValue(float input)
-{
-    if (input > 10.0f) {
-        input = (input > 1000.0f ? 1000.0f : input);
-    } else if (input < -10.0f) {
-        input = -1001.0f - input;
-        input = input < -1000.0f ? -1000.0f : input;
-    } else {
-        input = 0.0f;
-    }
-    return DSHOT_3D_FORWARD_MIN_THROTTLE + input;
-}
-
 void motorMix4WD(void)
 {
+    static float setPoints[3] = {0.0f};
+    //static float accum_yaw_error = 0.0f;
     // Set all motors to idle if not armed
-    if (!ARMING_FLAG(ARMED)) {
-        for (int i = 0; i < mixerRuntime.motorCount; i++) {
-            motor[i] = mixerRuntime.disarmMotorOutput;
-        }
-        return;
+    if (!ARMING_FLAG(ARMED)) goto HALT_MOTORS;
+    // Check for motor availablity
+    if (mixerRuntime.motorCount < 4) goto HALT_MOTORS;
+    // Joystick deadzone
+    float commandSum = 0;
+    for (int i = 0; i < 3; i++) {
+        commandSum += fabsf(rcCommand[i]);
     }
+    if (commandSum < 10.0f) {
+        // Treat as zero input
+        for (int i = 0; i < 3; i++) {
+            rcCommand[i] = 0.0f;
+        }
+    };
+    // Accumulate yaw error
+    // accum_yaw_error += command[YAW] - gyro.gyroADCf[YAW];
+    // Update PID
+    // setPoints[PITCH] = simplePID(&PID[PITCH], setPoints[PITCH] - rcCommand[PITCH]);
+    // setPoints[ROLL ] = simplePID(&PID[ROLL ], setPoints[ROLL ] - rcCommand[ROLL ]);
+    // setPoints[YAW  ] = simplePID(&PID[YAW  ], setPoints[YAW  ] - rcCommand[YAW  ]);
+    if (rcData[5] > 1500) {
+        // auto control via MSP protocol
+        memcpy_fn(motor, motor_msp, sizeof(*motor_msp) * MAX_SUPPORTED_MOTORS);
+        return;
+    } 
+    // manual control
+    setPoints[PITCH] = rcCommand[PITCH];
+    setPoints[ROLL ] = rcCommand[ROLL ];
+    setPoints[YAW  ] = rcCommand[YAW  ];
+    // setPoints[2] = simplePID(&PID[2], accum_yaw_error);
     // Proceed with mixing
     float scale = 1000.0f;
     const float *mtx = wheelMtx;
-    // Check for motor availablity
-    if (mixerRuntime.motorCount < 4) {
-        return;
-    }
     // Calculate motor output
     for (int i = 0; i < 4; i++) {
         motor[i] =
-            rcCommand[PITCH] * mtx[0] + // Forward/backward
-            rcCommand[ROLL ] * mtx[1] + // Left/right
-            rcCommand[YAW  ] * mtx[2];  // Rotate
+            setPoints[PITCH] * mtx[0] + // Forward/backward
+            setPoints[ROLL ] * mtx[1] + // Left/right
+            setPoints[YAW  ] * mtx[2];  // Rotate
         mtx += 3;
         float absMotor = fabsf(motor[i]);
         if (absMotor > scale) {
@@ -150,6 +218,18 @@ void motorMix4WD(void)
     for (int i = 0; i < 4; i++) {
         motor[i] = normalizeValue(motor[i] / scale);
     }
+    return;
+    // Only executed if motors are halted
+HALT_MOTORS:
+    for (int i = 0; i < mixerRuntime.motorCount; i++) {
+        motor[i] = mixerRuntime.disarmMotorOutput;
+    }
+    for (int i = 0; i < 3; i++) {
+        setPoints[i] = 0.0f;
+    }
+    // accum_yaw_error = 0.0f;
+    resetPID();
+    return;
 }
 
 void stopMotors(void)
