@@ -317,11 +317,11 @@ void updateArmingStatus(void)
             unsetArmingDisabled(ARMING_DISABLED_THROTTLE);
         }
 
-        if (!isUpright() && !IS_RC_MODE_ACTIVE(BOXFLIPOVERAFTERCRASH)) {
-            setArmingDisabled(ARMING_DISABLED_ANGLE);
-        } else {
-            unsetArmingDisabled(ARMING_DISABLED_ANGLE);
-        }
+        // if (!isUpright() && !IS_RC_MODE_ACTIVE(BOXFLIPOVERAFTERCRASH)) {
+        //     setArmingDisabled(ARMING_DISABLED_ANGLE);
+        // } else {
+        //     unsetArmingDisabled(ARMING_DISABLED_ANGLE);
+        // }
 
         if (getAverageSystemLoadPercent() > LOAD_PERCENTAGE_ONE) {
             setArmingDisabled(ARMING_DISABLED_LOAD);
